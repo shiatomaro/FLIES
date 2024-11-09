@@ -15,7 +15,7 @@ type User struct {
 	Name      string    `json:"name"`                   // name of user
 	Username  string    `json:"username" gorm:"unique"` // userame of user
 	Email     string    `json:"email" gorm:"unique"`    // email of user
-	Paaword   string    `json"-"`                       // to hide password in JSON reponse
+	Password  []byte    `json:"-"`                      // to hide password in JSON reponse
 	CreatedAt time.Time `json:"createdAt"`
 }
 
@@ -40,7 +40,7 @@ func main() {
 	router.POST("/users", createUser)
 	router.GET("/users/:id", getUserByID)
 	router.PUT("/users/:id", updateUser)
-	router.DELETE("/users/:id", deleterUser)
+	router.DELETE("/users/:id", deleteUser)
 	// run server
 	router.Run("localhost:8080")
 }
@@ -101,6 +101,8 @@ func deleteUser(c *gin.Context) {
 	c.JSON(http.StatusNoContent, gin.H{})
 }
 
+// sign up-func
+
 func signup(c *gin.Context) {
 	var newUser User
 	if err := c.BindJSON(&newUser); err != nil {
@@ -108,20 +110,39 @@ func signup(c *gin.Context) {
 		return
 	}
 
-	// Hash the password
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newUser.Password), bcrypt.DefaultCost)
+	// To hass the password
+	hashedPass, err := bcrypt.GenerateFromPassword([]byte(newUser.Password), bcrypt.DefaultCost)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to hash password"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to hash password"})
 		return
 	}
-	newUser.Password = string(hashedPassword)
+
+	newUser.Password = hashedPass
 	newUser.CreatedAt = time.Now()
 
-	// Save new user to the database
 	if err := db.Create(&newUser).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create new user"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "user created"})
+}
+
+func login(c *gin.Context) {
+	var inputUser User
+	var storedUser User
+
+	if err := c.BindJSON(&inputUser); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	// find user by username
+	if err := db.Where("username = ?", inputUser.Username).First(&storedUser).Error; err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid username or password"})
+		return
+	}
+	if err := bcrypt.CompareHashAndPassword(storedUser.Password, []byte(inputUser.Password)); err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid username or password"})
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"message": "User created successfully"})
 }
