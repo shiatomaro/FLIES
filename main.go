@@ -2,17 +2,21 @@ package main
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
 type User struct {
-	ID       uint   `json:"id" gorm:"primaryKey"` // primaryKey makes this a unique id
-	Name     string `json:"name"`                 // name of user
-	Username string `json:"username"`             // userame of user
-	Email    string `json:"email"`                // email of user
+	ID        uint      `json:"id" gorm:"primaryKey"`   // primaryKey makes this a unique id
+	Name      string    `json:"name"`                   // name of user
+	Username  string    `json:"username" gorm:"unique"` // userame of user
+	Email     string    `json:"email" gorm:"unique"`    // email of user
+	Paaword   string    `json"-"`                       // to hide password in JSON reponse
+	CreatedAt time.Time `json:"createdAt"`
 }
 
 var db *gorm.DB
@@ -26,14 +30,17 @@ func main() {
 	if err != nil {
 		panic("failed to open database")
 	}
-	db.AutoMigrate(&Users{}) //auto-migrate User struct to update/create the database schema
+	db.AutoMigrate(&User{}) //auto-migrate User struct to update/create the database schema
 
+	// Public routes
+	router.POST("/signup", signup)
+	router.POST("/login", login)
 	//routes
 	router.GET("/users", getUsers)
 	router.POST("/users", createUser)
 	router.GET("/users/:id", getUserByID)
 	router.PUT("/users/:id", updateUser)
-	router.DELETE("/Users/:id", deleterUser)
+	router.DELETE("/users/:id", deleterUser)
 	// run server
 	router.Run("localhost:8080")
 }
@@ -92,4 +99,29 @@ func deleteUser(c *gin.Context) {
 	}
 	db.Delete(&user) // Delete user from the database
 	c.JSON(http.StatusNoContent, gin.H{})
+}
+
+func signup(c *gin.Context) {
+	var newUser User
+	if err := c.BindJSON(&newUser); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Hash the password
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newUser.Password), bcrypt.DefaultCost)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to hash password"})
+		return
+	}
+	newUser.Password = string(hashedPassword)
+	newUser.CreatedAt = time.Now()
+
+	// Save new user to the database
+	if err := db.Create(&newUser).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"message": "User created successfully"})
 }
