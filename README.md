@@ -4,10 +4,6 @@
 
 **FLIES** is a full-stack web application built with **React (Material UI)** for the frontend and **Go (Gin)** for the backend. It provides authentication, role-based access control, and user management capabilities.
 
-## Features
-
-c
-
 ## Technologies Used
 
 ### **Frontend (React.js)**
